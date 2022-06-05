@@ -9,6 +9,8 @@
 #include "interface/mmal/util/mmal_util.h"
 #include "interface/mmal/util/mmal_default_components.h"
 #include "interface/mmal/util/mmal_util_params.h"
+#include <stdio.h>
+#include <SDL2/SDL.h>
 
 #define CHECK_STATUS_M(STATUS, MSG, ERRHANDLER) \
 	if (STATUS != MMAL_SUCCESS) { \
@@ -139,6 +141,7 @@ GCS *gcs_create(GCS_CameraParams *cameraParams)
 	// Set format of video output
 	MMAL_ES_FORMAT_T *format = gcs->cameraOutput->format;
 	format->encoding = gcs->cameraParams.mmalEnc == 0? MMAL_ENCODING_OPAQUE : gcs->cameraParams.mmalEnc;
+	//format->encoding_variant = MMAL_ENCODING_RGB16;
 	format->encoding_variant = MMAL_ENCODING_I420;
 	MMAL_VIDEO_FORMAT_T *videoFormat = &format->es->video;
 	videoFormat->width = gcs->cameraParams.width;
@@ -335,7 +338,7 @@ static void gcs_onCameraOutput(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 	GCS *gcs = (GCS *)port->userdata;
 	if (buffer->length == 0)
 	{
-		LOG_TRACE("%s: zero-length buffer => EOS", port->name);
+		LOG_ERROR("%s: zero-length buffer => EOS", port->name);
 		mmal_buffer_header_release(buffer);
 	}
 	else if (buffer->data == NULL)
@@ -386,6 +389,7 @@ static void gcs_onWatchdogTrigger(void *context)
 	GCS *gcs = context;
 	LOG_ERROR("%s: no frames received for %d ms, aborting", gcs->cameraOutput->name, GCS_WATCHDOG_TIMEOUT_MS);
 	gcs_stop(gcs);
+	SDL_Quit(); ///remove once fixed
 }
 
 int gcs_annotate(GCS *gcs, const char *string) 
