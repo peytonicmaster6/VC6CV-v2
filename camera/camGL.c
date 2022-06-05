@@ -12,10 +12,12 @@
 #include <GLES3/gl3platform.h> 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <linux/videodev2.h>
 //#include <EGL/eglext_brcm.h>
 #include "interface/vcos/vcos.h"
 #include "interface/vcos/vcos_stdint.h"
 #include "interface/vcos/vcos_stdbool.h"
+#include <interface/vcsm/user-vcsm.h>
 
 #include <libdrm/drm_fourcc.h>
 
@@ -34,10 +36,7 @@ VCOS_LOG_CAT_T app_log_category;
 
 // Max number of simultaneous EGL images supported = max number of distinct video decoder buffers
 #define MAX_SIMUL_FRAMES 4
-#define EGL_IMAGE_BRCM_MULTIMEDIA        0x99930B2
-#define EGL_IMAGE_BRCM_MULTIMEDIA_Y      0x99930C0
-#define EGL_IMAGE_BRCM_MULTIMEDIA_U      0x99930C1
-#define EGL_IMAGE_BRCM_MULTIMEDIA_V      0x99930C2
+
 
 // A camera frame with MMAL opaque buffer handle and corresponding EGL image
 typedef struct CamGL_FrameInternal
@@ -332,18 +331,20 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 	//uint32_t bo_handles[4] = { 0 };
 	//uint64_t modifiers[4] = { 0 };
 	//unsigned int fourcc = MMAL_FOURCC('Y','U','1','2');
-	//int ret;
-	
-	//EGLint egl_major, egl_minor;
-	//eglInitialize(camGL->eglSetup.display, &egl_major, &egl_minor);
 	
 	/* Lookup or create EGL image corresponding to supplied buffer handle
 	 * Frames array is filled in sequentially and frames are bound to one buffer over their lifetime */
+
+
+	
 	int i;
 	CamGL_FrameInternal *frameInt = NULL;
 	for (i = 0; i < MAX_SIMUL_FRAMES; i++)
 	{
 		frameInt = &camGL->frames[i];
+		//unsigned int vcsm_handle = vcsm_import_dmabuf((int)frameInt, "DMA buffer creation");
+		//int buffer = vcsm_export_dmabuf(vcsm_handle);
+		
 		if (frameInt->mmalBufferHandle == frameBuffer)
 		{ // Found cached frame and corresponding image
 			break;
@@ -353,108 +354,44 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 		{ // Found unused frame - buffer has yet to be cached and associated with an image
 			CHECK_GL(camGL);
 
-			//EGLint attribs[] = {
-				//EGL_IMAGE_PRESERVED_KHR, GL_TRUE,
+			/*EGLint attribs[] = {
+				EGL_IMAGE_PRESERVED_KHR, GL_TRUE,
 				//EGL_NONE
 				///All of these are required
-				//EGL_WIDTH, 1920,
-				//EGL_HEIGHT, 1080,
-				//EGL_LINUX_DRM_FOURCC_EXT, fourcc,
-				//EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)frameBuffer,
-				//EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
-				//EGL_DMA_BUF_PLANE0_PITCH_EXT, 0,
-				//EGL_NONE
+				EGL_WIDTH, 1920,
+				EGL_HEIGHT, 1080,
+				EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_RGB888,
+				EGL_DMA_BUF_PLANE0_FD_EXT, (int)frameBuffer,
+				EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+				EGL_DMA_BUF_PLANE0_PITCH_EXT, 1920*4,
+				EGL_NONE
 				
 				//EGL_YUV_COLOR_SPACE_HINT_EXT, EGL_ITU_REC601_EXT,
 				//EGL_SAMPLE_RANGE_HINT_EXT, EGL_YUV_FULL_RANGE_EXT,
 				//EGL_YUV_CHROMA_HORIZONTAL_SITING_HINT_EXT, EGL_YUV_CHROMA_SITING_0_EXT,
 				//EGL_YUV_CHROMA_VERTICAL_SITING_HINT_EXT, EGL_YUV_CHROMA_SITING_0_EXT,
-			//};
+			};*/
+			//stride = height * 4 or stride = width*3
+			int stride = camGL->params.height * 4;
 			EGLint attribs[] =
 			{
-				EGL_WIDTH, camGL->params.width,
-				EGL_HEIGHT, camGL->params.height,
-				EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_YUV411,
+				//EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
+				EGL_WIDTH, (EGLint)camGL->params.width,
+				EGL_HEIGHT, (EGLint)camGL->params.height,
+				EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_YUV420,
 				EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)frameBuffer,
 				EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
-				EGL_DMA_BUF_PLANE0_PITCH_EXT, camGL->params.width * 4,
+				EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
+				EGL_DMA_BUF_PLANE1_FD_EXT, (EGLint)frameBuffer,
+				EGL_DMA_BUF_PLANE1_OFFSET_EXT, (EGLint)(stride * camGL->params.height),
+				EGL_DMA_BUF_PLANE1_PITCH_EXT, (EGLint)(stride / 2),
+				EGL_DMA_BUF_PLANE2_FD_EXT, (EGLint)frameBuffer,
+				EGL_DMA_BUF_PLANE2_OFFSET_EXT, (EGLint)(stride * camGL->params.height + (stride/2)*(camGL->params.height / 2)),
+				EGL_DMA_BUF_PLANE2_PITCH_EXT, (EGLint)(stride / 2),
+				EGL_YUV_COLOR_SPACE_HINT_EXT, EGL_ITU_REC709_EXT,
+				EGL_SAMPLE_RANGE_HINT_EXT, EGL_YUV_FULL_RANGE_EXT,
 				EGL_NONE
 			};
-			//pitches[0] = camGL->params.width;
-			//pitches[1] = pitches[0];
-			
-			//modifiers[0] = DRM_FORMAT_MOD_BROADCOM_SAND128_COL_HEIGHT(get_sand_column_pitch(camGL->params.height));
-			//modifiers[1] = modifiers[0];
-			
-			//offsets[1] = 128 * (camGL->params.height+32);
-			//offsets[2] = offsets[1] + pitches[1] * camGL->params.height;
-
-			/*bo_handles[1] = bo_handles[2] = bo_handles[0];
-					
-			EGLint attribs[50];
-			int j = 0;
-			attribs[j++] = EGL_WIDTH;
-			attribs[j++] = camGL->params.width;
-			attribs[j++] = EGL_HEIGHT;
-			attribs[j++] = camGL->params.height;
-
-			attribs[j++] = EGL_LINUX_DRM_FOURCC_EXT;
-			attribs[j++] = fourcc;
-
-			attribs[j++] = EGL_DMA_BUF_PLANE0_FD_EXT;
-			attribs[j++] = (EGLint)frameBuffer;
-
-			attribs[j++] = EGL_DMA_BUF_PLANE0_OFFSET_EXT;
-			attribs[j++] = offsets[0];
-
-			attribs[j++] = EGL_DMA_BUF_PLANE0_PITCH_EXT;
-			attribs[j++] = pitches[0];
-			
-			//Not sure if I need these or not since the encoding format is I420
-			if (modifiers[0]) { 
-				attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT ;
-				attribs[i++] = modifiers[0] & 0xFFFFFFFF;
-				attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT ;
-				attribs[i++] = modifiers[0] >> 32;
-			}
-
-			if (pitches[1]) {
-				attribs[i++] = EGL_DMA_BUF_PLANE1_FD_EXT;
-				attribs[i++] = (EGLint)frameBuffer;
-
-				attribs[i++] = EGL_DMA_BUF_PLANE1_OFFSET_EXT;
-				attribs[i++] = offsets[1];
-
-				attribs[i++] = EGL_DMA_BUF_PLANE1_PITCH_EXT;
-				attribs[i++] = pitches[1];
-
-				if (modifiers[1]) {
-					attribs[i++] = EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT ;
-					attribs[i++] = modifiers[1] & 0xFFFFFFFF;
-					attribs[i++] = EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT ;
-					attribs[i++] = modifiers[1] >> 32;
-				}
-			}
-
-			if (pitches[2]) {
-				attribs[i++] = EGL_DMA_BUF_PLANE2_FD_EXT;
-				attribs[i++] = (EGLint)frameBuffer;
-
-				attribs[i++] = EGL_DMA_BUF_PLANE2_OFFSET_EXT;
-				attribs[i++] = offsets[2];
-
-				attribs[i++] = EGL_DMA_BUF_PLANE2_PITCH_EXT;
-				attribs[i++] = pitches[2];
-
-				if (modifiers[2]) {
-					attribs[i++] = EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT ;
-					attribs[i++] = modifiers[2] & 0xFFFFFFFF;
-					attribs[i++] = EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT ;
-					attribs[i++] = modifiers[2] >> 32;
-				}
-			}
-			
-			attribs[j++] = EGL_NONE;*/
 			
 			if(eglGetCurrentContext() == 0){
 				printf("no egl context\n");
@@ -485,7 +422,7 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 				//	vcos_log_error("GL error during eglCreateImageKHR() : error 0x%04x", eglerror);
 				//	goto errorKHR;
 				//}
-				CHECK_EVAL(frameInt->eglImageY != EGL_NO_IMAGE_KHR, "Failed to convert frame buffer to Y EGL image!", errorKHR);
+				CHECK_EVAL(frameInt->eglImageY != EGL_NO_IMAGE_KHR, "Failed to convert frame buffer to Y EGL image!\n", errorKHR);
 				if (camGL->params.format == CAMGL_YUV)
 				{
 					frameInt->eglImageU = eglCreateImageKHR(camGL->eglSetup.display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
@@ -497,7 +434,7 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 			}
 
 			// Success
-			vcos_log_trace("Created EGL images format %d for buffer index %d", camGL->params.format, i);
+			vcos_log_error("Created EGL images format %d for buffer index %d", camGL->params.format, i);
 			frameInt->mmalBufferHandle = frameBuffer;
 			frameInt->format = camGL->params.format;
 			CHECK_GL(camGL);
@@ -553,7 +490,7 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 
 /* Thread-Safe state accessors */
 
-static void camGL_setQuit(CamGL *camGL, bool error)
+ static void camGL_setQuit(CamGL *camGL, bool error)
 {
 	vcos_mutex_lock(&camGL->accessMutex);
 	camGL->quit = true;
