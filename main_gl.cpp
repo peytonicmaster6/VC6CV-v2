@@ -100,6 +100,7 @@ int main(int argc, char **argv)
 	
 	// Setup EGL context
 	setupEGL(&eglSetup, params.width, params.height);
+	//std::cout << "width" << params.width << "\n";
 
 	//Print out camera number for logging purposes
 	std::cout << "Camera Number " << params.camera_num << "\n";
@@ -292,6 +293,7 @@ int main(int argc, char **argv)
 				// ---- Debugging and Statistics ----
 		
 				numFrames++;
+				printf("frames", numFrames);
 				if (numFrames % 100 == 0)
 				{ // Log FPS
 					auto currentTime = std::chrono::high_resolution_clock::now();
