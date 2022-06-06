@@ -373,6 +373,9 @@ static int camGL_processCameraFrame(CamGL *camGL, void *frameBuffer)
 			};*/
 			//stride = height * 4 or stride = width*3
 			int stride = camGL->params.height * 4;
+			//int stride = 0.933333 * camGL->params.width;
+			//int width = 0.9 * camGL->params.width;
+			//int height = 0.9 * camGL->params.height;
 			EGLint attribs[] =
 			{
 				//EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
